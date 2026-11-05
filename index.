@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Meli</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; font-family: system-ui, sans-serif; }
+  body { background: #0f172a; color: #e2e8f0; padding: 20px; max-width: 440px; margin: auto; }
+  h1 { color: #fbbf24; text-align: center; margin-bottom: 4px; }
+  .sub { text-align: center; font-size: .85rem; color: #94a3b8; margin-bottom: 20px; }
+  .card { background: #1e293b; border-radius: 12px; padding: 16px; margin-bottom: 14px; }
+  label { display: block; font-size: .85rem; color: #94a3b8; margin: 10px 0 4px; }
+  input { width: 100%; padding: 12px; border-radius: 8px; border: 1px solid #475569; background: #0f172a; color: #fff; font-size: 1rem; }
+  input:focus { outline: 2px solid #38bdf8; }
+  button { width: 100%; padding: 14px; border: none; border-radius: 8px; font-weight: 700; font-size: 1rem; cursor: pointer; margin-top: 12px; }
+  .btn-primary { background: #fbbf24; color: #0f172a; }
+  .btn-secondary { background: #334155; color: #e2e8f0; font-size: .9rem; padding: 10px; }
+  .resultado { margin-top: 14px; padding: 16px; border-radius: 10px; text-align: center; }
+  .resultado.gana { background: #14532d; border: 1px solid #4ade80; }
+  .resultado.pierde { background: #450a0a; border: 1px solid #f87171; }
+  .resultado .monto { font-size: 2rem; font-weight: 800; margin: 6px 0; }
+  .resultado .etiqueta { font-size: .8rem; text-transform: uppercase; letter-spacing: 1px; opacity: .8; }
+  .resultado .detalle { font-size: .8rem; margin-top: 10px; color: #cbd5e1; line-height: 1.6; }
+  .verde { color: #4ade80; } .rojo { color: #f87171; } .amarillo { color: #fbbf24; }
+  .historial-item { background: #0f172a; border-radius: 8px; padding: 10px; margin-top: 8px; font-size: .85rem; display: flex; justify-content: space-between; border-left: 3px solid #4ade80; }
+  .historial-item.perdida { border-left-color: #f87171; }
+  .vacio { text-align: center; color: #64748b; font-size: .85rem; padding: 16px 0; }
+  .total { display: flex; justify-content: space-between; padding: 12px; background: #0f172a; border-radius: 8px; margin-top: 10px; font-weight: 700; }
+</style>
+</head>
+<body>
+
+<h1>🚚 Meli</h1>
+<p class="sub">$3.200 por recorrido (0–50 km) · $64/km extra</p>
+
+<div class="card">
+  <label>Kilómetros recorridos</label>
+  <input type="number" id="km" value="0" min="0" step="0.1" placeholder="Ej: 42">
+
+  <label>Consumo del vehículo (L/100 km)</label>
+  <input type="number" id="consumo" value="8" step="0.1">
+
+  <label>Precio del combustible ($/litro)</label>
+  <input type="number" id="precioLitro" value="1200" step="10">
+
+  <button class="btn-primary" onclick="calcular()">Calcular</button>
+
+  <div id="resultado"></div>
+</div>
+
+<div class="card">
+  <h2 style="font-size:.9rem; color:#38bdf8; margin-bottom:10px; text-transform:uppercase;">Historial</h2>
+  <div id="historial"><div class="vacio">Sin recorridos</div></div>
+  <div class="total"><span>Ganancia acumulada</span><span id="total">$0</span></div>
+  <button class="btn-secondary" onclick="borrarHistorial()">Borrar historial</button>
+</div>
+
+<script>
+const TARIFA = 3200;
+const LIMITE = 50;
+const EXTRA = 64;
+
+let historial = JSON.parse(localStorage.getItem('meli_simple') || '[]');
+let ultimoCalculo = null;
+
+const fmt = n => '$' + Math.round(n).toLocaleString('es-AR');
+
+function calcular() {
+  const km = parseFloat(document.getElementById('km').value) || 0;
+  const consumo = parseFloat(document.getElementById('consumo').value) || 0;
+  const precio = parseFloat(document.getElementById('precioLitro').value) || 0;
+
+  if (km <= 0) return alert('Ingresá los km recorridos.');
+
+  const excedente = km > LIMITE ? (km - LIMITE) * EXTRA : 0;
+  const ingreso = TARIFA + excedente;
+  const litros = (km * consumo) / 100;
+  const combustible = litros * precio;
+  const neta = ingreso - combustible;
+
+  ultimoCalculo = { km, ingreso, combustible, neta };
+
+  const div = document.getElementById('resultado');
+  div.className = 'resultado ' + (neta >= 0 ? 'gana' : 'pierde');
+  div.innerHTML = `
+    <div class="etiqueta">${neta >= 0 ? '✅ Ganancia' : '⚠️ Pérdida'}</div>
+    <div class="monto ${neta >= 0 ? 'verde' : 'rojo'}">${fmt(neta)}</div>
+    <div class="detalle">
+      Ingreso: <strong class="amarillo">${fmt(ingreso)}</strong><br>
+      Combustible: <strong class="rojo">-${fmt(combustible)}</strong>
+      ${excedente > 0 ? `<br>Incluye ${(km - LIMITE).toFixed(1)} km extra (${fmt(excedente)})` : ''}
+    </div>
+  `;
+
+  // Botón guardar
+  const btn = document.createElement('button');
+  btn.textContent = '💾 Guardar';
+  btn.className = 'btn-secondary';
+  btn.onclick = guardar;
+  div.appendChild(btn);
+}
+
+function guardar() {
+  if (!ultimoCalculo) return;
+  historial.unshift({ ...ultimoCalculo, fecha: new Date().toLocaleDateString('es-AR') });
+  localStorage.setItem('meli_simple', JSON.stringify(historial));
+  document.getElementById('resultado').innerHTML = '';
+  document.getElementById('km').value = 0;
+  ultimoCalculo = null;
+  render();
+}
+
+function render() {
+  const cont = document.getElementById('historial');
+  if (historial.length === 0) {
+    cont.innerHTML = '<div class="vacio">Sin recorridos</div>';
+  } else {
+    cont.innerHTML = historial.map(h => `
+      <div class="historial-item ${h.neta < 0 ? 'perdida' : ''}">
+        <span>${h.km.toFixed(1)} km · ${h.fecha}</span>
+        <strong class="${h.neta >= 0 ? 'verde' : 'rojo'}">${fmt(h.neta)}</strong>
+      </div>
+    `).join('');
+  }
+  const total = historial.reduce((s, h) => s + h.neta, 0);
+  const totalEl = document.getElementById('total');
+  totalEl.textContent = fmt(total);
+  totalEl.className = total >= 0 ? 'verde' : 'rojo';
+}
+
+function borrarHistorial() {
+  if (confirm('¿Borrar todo el historial?')) {
+    historial = [];
+    localStorage.setItem('meli_simple', '[]');
+    render();
+  }
+}
+
+render();
+</script>
+</body>
+</html>
